@@ -1,0 +1,78 @@
+# Use graphical install
+graphical
+# License agreement
+eula --agreed
+# Reboot after installation
+reboot
+
+%pre
+if [ -e "/dev/disk/by-label/\x2fdata" ]; then
+DATA_DISK=$(lsblk -ndo pkname "/dev/disk/by-label/\x2fdata")
+OS_DISK=$(lsblk --filter "type=='disk'" -ndo name --sort size | grep -v $DATA_DISK)
+echo "part /data --fstype=ext4 --onpart=LABEL=/data --noformat" >>/tmp/diskconf
+else
+OS_DISK=$(lsblk --filter "type=='disk'" -ndo name --sort size | head -1)
+DATA_DISK=$(lsblk --filter "type=='disk'" -ndo name | grep -v $OS_DISK)
+echo "part /data --fstype=ext4 --grow --label=/data --ondisk=$DATA_DISK" >>/tmp/diskconf
+fi
+echo "ignoredisk --only-use=$OS_DISK,$DATA_DISK" >> /tmp/diskconf
+echo "clearpart --all --initlabel --drives=$OS_DISK" >> /tmp/diskconf
+
+cat >> /tmp/diskconf << EOF
+part biosboot --fstype="biosboot" --ondisk=$OS_DISK --size=1
+part /boot --fstype="ext4" --ondisk=$OS_DISK --size=1024
+part / --fstype="ext4" --ondisk=$OS_DISK --size=30720
+part swap --fstype="swap" --ondisk=$OS_DISK --grow
+EOF
+%end
+
+%post
+install -o root -g root -m 400 <(echo -e "%wheel ALL=(ALL) NOPASSWD: ALL") /etc/sudoers.d/wheel
+%end
+
+%post --nochroot
+mv /tmp/diskconf /mnt/sysroot/root/
+%end
+
+%addon com_redhat_kdump --enable --reserve-mb='auto'
+
+%end
+
+# Keyboard layouts
+keyboard --vckeymap=us --xlayouts='us'
+# System language
+lang en_US.UTF-8
+
+# Network information
+network --hostname=malaga
+
+%packages
+@^minimal-environment
+bind-utils
+epel-release
+ncdu
+net-tools
+tmux
+tree
+wget
+
+%end
+
+# SELinux configuration
+selinux --disabled
+
+firstboot --disable
+# Do not configure the X Window System
+skipx
+
+# Partition clearing information
+# Disk partitioning information
+%include /tmp/diskconf
+
+# System timezone
+timezone America/Los_Angeles --utc
+
+#Root password
+rootpw --lock
+sshkey --username=omar "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBFtPrFUqwSn0vqq/G3ojB/79kStaMLAN/Y+Pi/jMVYt omar"
+user --groups=wheel --name=omar --password=$y$j9T$lQYLwEIpa9HEEwqlQRkMMpOp$8FyFybdy3E1X7X86EgZm178qCIoPanxJMToBPFVm737 --iscrypted --gecos="omar"
